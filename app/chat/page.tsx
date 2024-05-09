@@ -31,7 +31,6 @@ const Chat = () => {
 
 
     useEffect(() => {
-
         const token = localStorage.getItem('token') || '';
         const decoded = decodeToken(token);
         setUserItem(decoded);
@@ -95,6 +94,7 @@ const Chat = () => {
         }
 
         const handleReceiveMessage = (receivedRoomId: string, content: string, sender: string, senderName: string, senderImage: string, sentTime: string, messageFiles: MessageFileResponeDTO[]) => {
+            
             if (receivedRoomId.toUpperCase() === roomId.toUpperCase()) {
                 
                 const newMsg = {
@@ -190,8 +190,9 @@ const Chat = () => {
     // };
 
     const fetchInstructorSectionsMessage = async () => {
+        var termId = '070F33F2-51C6-4A3D-6622-08DC0FF4C7FB';
         try {
-            const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/DirectMessage?search=`, {
+            const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/DirectMessage/${termId}?search=`, {
                 headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
             });
             var data = response.data.data;

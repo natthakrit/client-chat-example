@@ -12,8 +12,10 @@ export interface JWTDTO {
 
 export interface SectionMessage {
     sectionId: string
+    courseId: string
     courseCode: string
     courseName: string
+    courseImage: string
     modules: Module[]
 }
 
@@ -43,6 +45,7 @@ export interface UserPresent {
     isOnline: string
     lastOnline: string
 }
+
 export interface UnreadMessageCountDTO {
     chatRoomId: string
     moduleId: string
