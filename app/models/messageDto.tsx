@@ -83,6 +83,13 @@ export interface ResponseMessageDTO {
 
 export interface MessageFileResponeDTO {
     fileName: string
-    url: string
+    fileUrl: string
     sortOrder: number
+}
+
+
+export interface MessagePageResultDTO {
+    content: string
+    sentTime: string
+    pageNo: number
 }

@@ -1,7 +1,7 @@
 // services/apiService.ts
 import { HubConnection } from '@microsoft/signalr';
 import axios from 'axios';
-import { FileAttachment, ResponseMessageDTO, ResponeMessageHistory, ResponseRoomMember, UnreadMessageCountDTO } from '../models/messageDto';
+import { FileAttachment, ResponseMessageDTO, ResponeMessageHistory, ResponseRoomMember, UnreadMessageCountDTO, MessagePageResultDTO } from '../models/messageDto';
 
 interface ChatMessage {
     receiverUserName: string;
@@ -10,7 +10,7 @@ interface ChatMessage {
 }
 
 export const createMessage = async (roomId: string, content: string, attachments: Array<FileAttachment> | []): Promise<ResponseMessageDTO | null> => {
-    if (content.trim()) {
+
         const token = localStorage.getItem('token');
         const url = `${process.env.NEXT_PUBLIC_API_URL}/client/v1/DirectMessage/send`;
         const data = JSON.stringify({
@@ -18,6 +18,8 @@ export const createMessage = async (roomId: string, content: string, attachments
             'content': content,
             'attachments': attachments
         });
+
+        console.log(data);
 
         try {
             const response = await fetch(url, {
@@ -36,9 +38,6 @@ export const createMessage = async (roomId: string, content: string, attachments
             console.error('Error sending message:', error.message);  // Corrected to `error.message` for standard error object
             return null;
         }
-    } else {
-        return null;  // If content is empty after trim, return null
-    }
 };
 
 
@@ -66,6 +65,21 @@ export const startChat = async (moduleId: string): Promise<ResponseRoomMember | 
     }
 };
 
+
+export const searchMessage = async (chatRoomId:string,pageSize:string,search: string): Promise<MessagePageResultDTO | null> => {
+    const token = localStorage.getItem('token');
+    try {
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/client/v1/DirectMessage/search-message/${chatRoomId}}?pageSize=${pageSize}&search=/${search}`, {
+            method: 'GET',
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const result = await response.json();
+        return result.data;
+    } catch (error) {
+        console.error('Error connecting to chat:', error);
+        return null;
+    }
+};
 
 export const fetchMsgHistory = async (chatRoomId: string, pageNumber: number, pageSize: number, initialQueryTime: string): Promise<ResponeMessageHistory | null> => {
     const token = localStorage.getItem('token');

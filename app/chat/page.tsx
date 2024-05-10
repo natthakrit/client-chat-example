@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import axios from "axios"; // Add axios for making HTTP requests
 import { HubConnection, HubConnectionBuilder, LogLevel } from "@microsoft/signalr";
 import { createMessage, decodeToken, fetchMsgHistory, getUnreadMessageCount, markMsgAsRead, startChat } from "../services/apiService";
@@ -27,7 +27,32 @@ const Chat = () => {
     const [isLoading, setIsLoading] = useState(false);
     const [hasMore, setHasMore] = useState(true);
     const [initialQueryTime, setInitialQueryTime] = useState(new Date());
+    const [totalRecords, setTotalRecords] = useState(0);
 
+    const scrollDivRef = useRef(null);  // Create a ref for the div
+
+    const pageSize = 20;
+
+    // เลื่อนไปยังตำแหน่งล่างสุด
+    const scrollToBottom = () => {
+        setTimeout(() => {
+            if (scrollDivRef.current) {
+                scrollDivRef.current.scrollTop = scrollDivRef.current.scrollHeight;
+            }
+        }, 100); // ให้เวลาสำหรับ DOM ในการอัปเดต
+    };
+
+    // เลื่อนไปยังตำแหน่งกลางจอ
+    const scrollToCenter = () => {
+        // เลื่อนไปยังตำแหน่งกลางหลังจากโหลดข้อมูล
+        setTimeout(() => {
+            if (scrollDivRef.current) {
+                const scrollHeight = scrollDivRef.current.scrollHeight;
+                const height = scrollDivRef.current.clientHeight;
+                scrollDivRef.current.scrollTop = (scrollHeight - height) / 2;
+            }
+        }, 100); // ค่า timeout สามารถปรับเปลี่ยนได้ตามความจำเป็น
+    };
 
 
     useEffect(() => {
@@ -75,15 +100,23 @@ const Chat = () => {
             var initialDate = new Date();
 
             try {
-                fetchMsgHistory(roomId, 1, 3, initialDate.toISOString()).then((res: any) => {
-                    setMessages(res.records);
+                fetchMsgHistory(roomId, 1, pageSize, initialDate.toISOString()).then((res: any) => {
+
+                    var sortMsg = res.records.sort((a: any, b: any) =>
+                        new Date(a.sentTime).getTime() - new Date(b.sentTime).getTime());
+
+                    setMessages(sortMsg);
+                    console.log(sortMsg);
                     setInitialQueryTime(new Date(res.initialQueryTime));
+                    setTotalRecords(res.totalRecords);
 
                     markMsgAsRead(roomId).then((msgUnread) => {
                         setNewMsgCount(msgUnread || []);
                         console.log(msgUnread);
                     });
                 });
+
+                scrollToBottom()
             } catch (err) {
                 console.error("Error retrieving message history:", err);
             }
@@ -94,9 +127,10 @@ const Chat = () => {
         }
 
         const handleReceiveMessage = (receivedRoomId: string, content: string, sender: string, senderName: string, senderImage: string, sentTime: string, messageFiles: MessageFileResponeDTO[]) => {
-            
+
+            console.log("Received Msg  1. " + JSON.stringify(messageFiles));
             if (receivedRoomId.toUpperCase() === roomId.toUpperCase()) {
-                
+
                 const newMsg = {
                     chatRoomId: receivedRoomId,
                     senderId: sender,
@@ -108,7 +142,7 @@ const Chat = () => {
                 };
 
                 console.log(newMessage);
-                
+
                 // Assuming setMessages updates state within a React component
                 setMessages(prevMessages => [...prevMessages, newMsg]);
 
@@ -148,17 +182,30 @@ const Chat = () => {
         const loadMessages = async () => {
             setIsLoading(true);
             try {
+
+                console.log(Math.ceil(totalRecords / pageSize));
+                console.log(page);
+                if (page > Math.ceil(totalRecords / pageSize))
+                    return;
+
                 //การโหลดหน้าเพิ่มแต่ล่ะครั้งตั้งส่งเวลาครั้งแรก เพื่อรักษาข้อความต่อเนื่อง
-                fetchMsgHistory(roomId, page, 3, initialQueryTime.toISOString()).then((res: any) => {
+                fetchMsgHistory(roomId, page, pageSize, initialQueryTime.toISOString()).then((res: any) => {
                     //เก็บเวลาปัจจุบันไว้ใน state
+                    setPage(res.pageNumber);
                     setInitialQueryTime(new Date(res.initialQueryTime));
-                    setMessages(prev => [...prev, ...res.records]);
+
+                    var sortMsg = res.records.sort((a: any, b: any) =>
+                        new Date(a.sentTime).getTime() - new Date(b.sentTime).getTime());
+
+                    setMessages(prev => [...sortMsg, ...prev]);
                     setHasMore(res.totalRecords > messages.length + res.records.length);
+                    setTotalRecords(res.totalRecords);
                 });
             } catch (error) {
                 console.error("Failed to fetch messages:", error);
             }
             setIsLoading(false);
+            scrollToCenter();
         };
 
         // if (hasMore && !isLoading) {
@@ -167,16 +214,20 @@ const Chat = () => {
     }, [page]);
 
     // Listen to scroll events and calculate when to fetch next page
-    // useEffect(() => {
-    //     const handleScroll = () => {
-    //         if (document.documentElement.scrollTop === 0) {
-    //             setPage(prev => prev + 1);
-    //         }
-    //     };
+    useEffect(() => {
+        const handleScroll = () => {
+            // Check if the scrollTop is 0 (scrolled to the top)
+            if (scrollDivRef.current.scrollTop === 0) {
+                setPage(prev => prev + 1);
+            }
+        };
 
-    //     window.addEventListener('scroll', handleScroll);
-    //     return () => window.removeEventListener('scroll', handleScroll);
-    // }, []);
+        const div = scrollDivRef.current;
+        div.addEventListener('scroll', handleScroll);  // Add event listener to the div
+
+        // Cleanup function to remove event listener
+        return () => div.removeEventListener('scroll', handleScroll);
+    }, []);  // Empty dependency array to ensure this effect runs once
 
 
     const loadmore = async () => {
@@ -205,16 +256,26 @@ const Chat = () => {
     const sendMessage = async (content: string) => {
 
         //ตรวจสอบว่า connection ไม่หลุด ก่อนทำการใดๆ
-        if (connection && content.trim()) {
+        if (connection) {
             try {
                 // Attempt to save the message to the database via API first
-                createMessage(roomId, content, []).then(async (res: ResponseMessageDTO | null) => {
-                    console.log(res);
-                    if (res && res.chatRoomId && res.senderId && res.content && res.sentTime && res.messageFiles) {
+                createMessage(roomId, content, [{ 'fileId': "469550BA-1F3F-44BA-2FDB-08DC18A2AB6C", 'sortOrder': 1 }]).then(async (res: ResponseMessageDTO | null) => {
+                    console.log("Sent Msg 1. " + JSON.stringify(res));
+                    if (res) {
+                        console.log("Sent Msg  2. " + JSON.stringify(res.messageFiles))
+
+
                         // Ensures that all necessary data is present
                         try {
                             // Only if the above succeeds, send the message through SignalR
-                            await connection.invoke("SendMessage", res.chatRoomId, res.content, res.senderId, res.senderName, res.senderImage, res.sentTime, res.messageFiles);
+                            await connection.invoke("SendMessage",
+                                res.chatRoomId,
+                                res.content,
+                                res.senderId,
+                                res.senderName,
+                                res.senderImage,
+                                res.sentTime,
+                                res.messageFiles);
                             console.log("SignalR message sent successfully.");
                         } catch (error) {
                             console.error("Failed to send message through SignalR:", error);
@@ -232,7 +293,7 @@ const Chat = () => {
                 console.error("Failed to send or save message:", error);
             }
         } else {
-            console.log("No connection established or content is empty.");
+            console.log("No connection established.");
         }
     };
 
@@ -345,10 +406,10 @@ const Chat = () => {
                         <div>กรุณาเลือกห้องแชท</div>
                     )}
 
+                    <br></br>
+                    <button onClick={loadmore} className="bg-blue-500 text-white p-2 rounded">LOADD MORE</button>
+                    <div ref={scrollDivRef} style={{ maxHeight: '500px', overflowY: 'auto' }}>
 
-                    <div>
-
-                        <button onClick={loadmore}>LOADD MORE</button>
                         {/* <input
                     type="text"
                     placeholder="Enter Room ID"
@@ -375,6 +436,17 @@ const Chat = () => {
                                     <p className="text-sm font-medium">{msg.senderName}</p> {/* Add styling for text size and weight */}
                                     <p className="text-xs">{msg.content}</p>
                                     <p className="text-xs">{new Date(msg.sentTime).toLocaleString()}</p>
+                                    {msg.messageFiles?.map((img, index) => (
+                                        <img key={index}
+                                            src={getImageSrc(img.fileUrl)}
+                                            width={100}
+                                            height={100}
+                                            alt="message img"
+                                            className="rounded-md"
+                                        />
+                                    ))}
+
+
                                 </div>
                             </div>
                         ))}
