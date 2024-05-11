@@ -33,6 +33,8 @@ const Chat = () => {
 
     const pageSize = 20;
 
+    const [selectedChatRoomData, setSelectedChatRoomData] = useState(null);
+
     // เลื่อนไปยังตำแหน่งล่างสุด
     const scrollToBottom = () => {
         setTimeout(() => {
@@ -341,6 +343,20 @@ const Chat = () => {
         }
     };
 
+    const onOpenChatRoom = (roomId: string, courseCode: string, courseName: string, courseImage: string, moduleName: string, studentName: string, studentImage: string) => {
+        setRoomId(roomId);
+
+        const details = {
+            courseCode,
+            courseName,
+            courseImage,
+            moduleName,
+            roomId
+        };
+
+        setSelectedChatRoomData(details);
+    }
+
     return (
         <div className="p-2 text-xs">
             <div>
@@ -376,7 +392,8 @@ const Chat = () => {
                                         {module.moduleName}
                                         <div className=" ms-10 ">
                                             {module.chatRooms.map((room) => (
-                                                <div className=" hover:text-blue-700 shadow border p-2 rounded-md mb-1 bg-white" onClick={(e) => setRoomId(room.chatRoomId)} key={room.chatRoomId}>
+                                                <div className=" hover:text-blue-700 shadow border p-2 rounded-md mb-1 bg-white"
+                                                    onClick={(e) => onOpenChatRoom(room.chatRoomId, sec.courseCode, sec.courseName, sec.courseImage, module.moduleName, room.studentName, room.studentImage)} key={room.chatRoomId}>
                                                     <p>ROOM ID : {room.chatRoomId}</p>
                                                     <p>MODULE ID : {module.moduleId}</p>
                                                     <p><b>{room.studentName}</b> {room.lastMessageSentTime}</p>
@@ -404,6 +421,19 @@ const Chat = () => {
                         <div>คุณเข้าร่วมห้องแชทหมายเลข {roomId} แล้ว</div>
                     ) : (
                         <div>กรุณาเลือกห้องแชท</div>
+                    )}
+
+                    {selectedChatRoomData && (
+                        <div>
+                            <h3>รายละเอียดห้องแชท คู่สนทนา:</h3>
+                            <p>Course Code: {selectedChatRoomData.courseCode}</p>
+                            <p>Course Name: {selectedChatRoomData.courseName}</p>
+                            <p>Course Image: <img width={50} height={50} src={selectedChatRoomData.courseImage} alt="Course" /></p>
+                            <p>Module Name: {selectedChatRoomData.moduleName}</p>
+                            <p>Chat Room ID: {selectedChatRoomData.chatRoomId}</p>
+
+                            <b>สถานะออนไลน์ ต้องเรียก Signalr แยกต่างหาก </b>
+                        </div>
                     )}
 
                     <br></br>
