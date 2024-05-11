@@ -90,6 +90,11 @@ const Chat = () => {
     }, []);
 
     useEffect(() => {
+
+        //reset pagno เมื่อเปลี่ยนห้องแชท
+        setPage(1);
+
+
         if (!connection) return;
 
         getUnreadMessageCount().then((data) => {
