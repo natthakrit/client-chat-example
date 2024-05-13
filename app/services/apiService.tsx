@@ -155,3 +155,20 @@ export function decodeToken(token: string): any {
         return null;
     }
 };
+
+
+export const checkUserOnline = async (userId:string): Promise<boolean | false> => {
+    const token = localStorage.getItem('token');
+    try {
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/client/v1/DirectMessage/check-user-online?userId=${userId}`, {
+            method: 'GET',
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const result = await response.json();
+        console.log('Get :', response);
+        return result.data;
+    } catch (error) {
+        console.error('Error :', error);
+        return false;
+    }
+};

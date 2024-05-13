@@ -2,8 +2,8 @@
 import { useEffect, useRef, useState } from "react";
 import axios from "axios"; // Add axios for making HTTP requests
 import { HubConnection, HubConnectionBuilder, LogLevel } from "@microsoft/signalr";
-import { createMessage, decodeToken, fetchMsgHistory, getUnreadMessageCount, markMsgAsRead, startChat } from "../services/apiService";
-import { FileAttachment, JWTDTO, MessageFileResponeDTO, ResponseMessageDTO, SectionMessage, UnreadMessageCountDTO } from "../models/messageDto";
+import { checkUserOnline, createMessage, decodeToken, fetchMsgHistory, getUnreadMessageCount, markMsgAsRead, startChat } from "../services/apiService";
+import { ChatRoomdetails, FileAttachment, JWTDTO, MessageFileResponeDTO, ResponseMessageDTO, SectionMessage, UnreadMessageCountDTO } from "../models/messageDto";
 import Image from "next/image";
 
 const moduleTypeVideoList = [
@@ -28,12 +28,13 @@ const Chat = () => {
     const [hasMore, setHasMore] = useState(true);
     const [initialQueryTime, setInitialQueryTime] = useState(new Date());
     const [totalRecords, setTotalRecords] = useState(0);
+    const [isOnline, setIsOnline] = useState(false);
 
     const scrollDivRef = useRef(null);  // Create a ref for the div
 
     const pageSize = 20;
 
-    const [selectedChatRoomData, setSelectedChatRoomData] = useState(null);
+    const [selectedChatRoomData, setSelectedChatRoomData] = useState<ChatRoomdetails | null>(null);
 
     // เลื่อนไปยังตำแหน่งล่างสุด
     const scrollToBottom = () => {
@@ -103,12 +104,15 @@ const Chat = () => {
 
         if (roomId) {
             //ทุกครั้งที่เปลี่ยนห้องแชท
+
+
+
             //โหลดครังแรก SET เวลา ให้เป็นเวลาปัจจุบัน
             var initialDate = new Date();
 
             try {
                 fetchMsgHistory(roomId, 1, pageSize, initialDate.toISOString()).then((res: any) => {
-
+                    console.log('msg history load')
                     var sortMsg = res.records.sort((a: any, b: any) =>
                         new Date(a.sentTime).getTime() - new Date(b.sentTime).getTime());
 
@@ -178,9 +182,21 @@ const Chat = () => {
         };
 
         connection.on("ReceiveMessage", handleReceiveMessage);
+
+
+        connection.on("UserStatusUpdate", (userId, status) => {
+            console.log("User Status Updated:", userId, status);
+            console.log(selectedChatRoomData?.studentId.toUpperCase());
+            if (userId.toUpperCase() == selectedChatRoomData?.studentId.toUpperCase()) {
+                setIsOnline(status);
+            }
+        });
+
         return () => {
             connection.off("ReceiveMessage", handleReceiveMessage);
         };
+
+
     }, [connection, roomId, userItem?.role]);  // Add dependencies here
 
     useEffect(() => {
@@ -348,18 +364,28 @@ const Chat = () => {
         }
     };
 
-    const onOpenChatRoom = (roomId: string, courseCode: string, courseName: string, courseImage: string, moduleName: string, studentName: string, studentImage: string) => {
-        setRoomId(roomId);
+    const onOpenChatRoom = (chatRoomId: string, courseCode: string, courseName: string, courseImage: string, moduleName: string, studentId: string, studentName: string, studentImage: string) => {
+        setRoomId(chatRoomId);
 
-        const details = {
+        const details: ChatRoomdetails = {
             courseCode,
             courseName,
             courseImage,
             moduleName,
-            roomId
+            chatRoomId,
+            studentId,
+            studentName,
+            studentImage
         };
 
         setSelectedChatRoomData(details);
+
+
+        //ตรวจสอบสถานะ ออนไลน์ของคู่สนทนา ครั้งแรกที่ joine room
+        var uuss = checkUserOnline(studentId).then((status: boolean) => {
+            setIsOnline(status);
+            console.log(status);
+        });
     }
 
     return (
@@ -398,7 +424,15 @@ const Chat = () => {
                                         <div className=" ms-10 ">
                                             {module.chatRooms.map((room) => (
                                                 <div className=" hover:text-blue-700 shadow border p-2 rounded-md mb-1 bg-white"
-                                                    onClick={(e) => onOpenChatRoom(room.chatRoomId, sec.courseCode, sec.courseName, sec.courseImage, module.moduleName, room.studentName, room.studentImage)} key={room.chatRoomId}>
+                                                    onClick={(e) => onOpenChatRoom(room.chatRoomId,
+                                                        sec.courseCode,
+                                                        sec.courseName,
+                                                        sec.courseImage,
+                                                        module.moduleName,
+                                                        room.studentId,
+                                                        room.studentName,
+                                                        room.studentImage)}
+                                                    key={room.chatRoomId}>
                                                     <p>ROOM ID : {room.chatRoomId}</p>
                                                     <p>MODULE ID : {module.moduleId}</p>
                                                     <p><b>{room.studentName}</b> {room.lastMessageSentTime}</p>
@@ -436,8 +470,11 @@ const Chat = () => {
                             <p>Course Image: <img width={50} height={50} src={selectedChatRoomData.courseImage} alt="Course" /></p>
                             <p>Module Name: {selectedChatRoomData.moduleName}</p>
                             <p>Chat Room ID: {selectedChatRoomData.chatRoomId}</p>
+                            <p>Student ID: {selectedChatRoomData.studentId}</p>
+                            <p>Student Name: {selectedChatRoomData.studentName}</p>
+                            <p>Student Img: {selectedChatRoomData.studentImage}</p>
 
-                            <b>สถานะออนไลน์ ต้องเรียก Signalr แยกต่างหาก </b>
+                            <b>สถานะออนไลน์ {isOnline ? "online" : "offline"} </b>
                         </div>
                     )}
 

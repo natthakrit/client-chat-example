@@ -27,6 +27,7 @@ export interface Module {
 
 export interface ChatRoom {
     chatRoomId: string
+    studentId: string
     studentName: string
     studentImage: string
     lastMessage: string
@@ -93,3 +94,16 @@ export interface MessagePageResultDTO {
     sentTime: string
     pageNo: number
 }
+
+
+
+export interface ChatRoomdetails {
+    courseCode: string
+    courseName: string
+    courseImage: string
+    moduleName: string
+    chatRoomId: string
+    studentId: string
+    studentName: string
+    studentImage: string
+};
