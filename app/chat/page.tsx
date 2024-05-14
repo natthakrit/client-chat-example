@@ -5,6 +5,7 @@ import { HubConnection, HubConnectionBuilder, LogLevel } from "@microsoft/signal
 import { checkUserOnline, createMessage, decodeToken, fetchMsgHistory, getUnreadMessageCount, markMsgAsRead, startChat } from "../services/apiService";
 import { ChatRoomdetails, FileAttachment, JWTDTO, MessageFileResponeDTO, ResponseMessageDTO, SectionMessage, UnreadMessageCountDTO } from "../models/messageDto";
 import Image from "next/image";
+import { useRouter, useSearchParams } from "next/navigation";
 
 const moduleTypeVideoList = [
     "4A37B38B-B085-4A1C-E337-08DC5940C853",
@@ -36,6 +37,11 @@ const Chat = () => {
 
     const [selectedChatRoomData, setSelectedChatRoomData] = useState<ChatRoomdetails | null>(null);
 
+
+    const router = useRouter();
+
+    const searchParams = useSearchParams();
+
     // เลื่อนไปยังตำแหน่งล่างสุด
     const scrollToBottom = () => {
         setTimeout(() => {
@@ -58,12 +64,26 @@ const Chat = () => {
     };
 
 
+    // ฟังก์ชันการเล่นเสียง
+    const playNotificationSound = () => {
+        const audio = new Audio('/audios/mixkit-long-pop-2358.wav');
+        audio.play();
+    };
+
+
     useEffect(() => {
+        // ดึงค่า id ของห้อง หากมีการรีเฟรชหน้าใหม่ เก็บไว้ใน state เพื่อเรียกใช้ดึงค่าพื้นฐานตามต้องการ
+        const chatRoomId = searchParams.get('r');
+        if (chatRoomId) {
+            setRoomId(chatRoomId);
+        }
+
         const token = localStorage.getItem('token') || '';
         const decoded = decodeToken(token);
         setUserItem(decoded);
 
         const initializeConnection = async () => {
+            // สร้างการเชื่อมต่อใหม่ทุกครั้งเมื่อหน้าเพจถูกโหลด
             const connection = new HubConnectionBuilder()
                 .withUrl(`${process.env.NEXT_PUBLIC_API_URL}/chatHub`, {
                     accessTokenFactory: () => token
@@ -71,6 +91,14 @@ const Chat = () => {
                 .withAutomaticReconnect()
                 .configureLogging(LogLevel.Information)
                 .build();
+
+            connection.onreconnecting(error => {
+                console.warn(`Connection lost due to error "${error}". Reconnecting.`);
+            });
+
+            connection.onreconnected(connectionId => {
+                console.log(`Connection reestablished. Connected with connectionId "${connectionId}".`);
+            });
 
             try {
                 await connection.start();
@@ -83,15 +111,20 @@ const Chat = () => {
             return connection;
         };
 
-        initializeConnection().then(connection => {
-            return () => {
-                connection?.stop();
-            };
-        });
+        initializeConnection(); // เริ่มต้นการเชื่อมต่อ
+
+        // ฟังก์ชัน cleanup (ภายใน return () => { ... } ของ useEffect) จะถูกเรียกใช้เมื่อคอมโพเนนต์ถูก unmount หรือเมื่อมีการเปลี่ยนแปลงใน dependency array ของ useEffect (ในกรณีนี้คือ ไม่ได้กำหนด)
+        // ที่จริงถ้าไม่มี dependency ไม่ต้องใส่ cleanup function ก็ได้ เพราะอย่างไร การรีเฟสหน้าใหม่ก็เป็นการ ตัดการเชื่อต่อ และ เชื่อต่อใหม่อยุ่ดี
+        // แต่ก็ต้องมีไว้ เพราะ ช่วยให้มั่นใจว่าการเชื่อมต่อ SignalR ถูกยกเลิกอย่างถูกต้องเมื่อคอมโพเนนต์ถูก unmount ซช่วยลดโอกาสในการเกิดปัญหาการเชื่อมต่อซ้ำซ้อน
+        // การหลีกเลี่ยงการรั่วของหน่วยความจำ เมื่อคอมโพเนนต์ถูก unmount โดยไม่มีการหยุดการเชื่อมต่อ
+        return () => {
+            if (connection) {
+                connection.stop();
+            }
+        };
     }, []);
 
     useEffect(() => {
-
         //reset pagno เมื่อเปลี่ยนห้องแชท
         setPage(1);
 
@@ -117,10 +150,11 @@ const Chat = () => {
                         new Date(a.sentTime).getTime() - new Date(b.sentTime).getTime());
 
                     setMessages(sortMsg);
-                    console.log(sortMsg);
+                    // console.log(sortMsg);
                     setInitialQueryTime(new Date(res.initialQueryTime));
                     setTotalRecords(res.totalRecords);
-
+                    
+                    //เข้าร่วมห้องแชท เป็นการอ่านข้อความของห้องนี้
                     markMsgAsRead(roomId).then((msgUnread) => {
                         setNewMsgCount(msgUnread || []);
                         console.log(msgUnread);
@@ -139,7 +173,10 @@ const Chat = () => {
 
         const handleReceiveMessage = (receivedRoomId: string, content: string, sender: string, senderName: string, senderImage: string, sentTime: string, messageFiles: MessageFileResponeDTO[]) => {
 
+            console.log("call function receiveMesaage.")
             console.log("Received Msg  1. " + JSON.stringify(messageFiles));
+
+            //Joine room
             if (receivedRoomId.toUpperCase() === roomId.toUpperCase()) {
 
                 const newMsg = {
@@ -154,33 +191,39 @@ const Chat = () => {
 
                 console.log(newMessage);
 
-                // Assuming setMessages updates state within a React component
+                // Assuming setMessages updates.
                 setMessages(prevMessages => [...prevMessages, newMsg]);
 
-                //ตั้งค่าการอ่านข้อความเลย
+                //ตั้งค่าการอ่านข้อความเลย หาก joine room อยู่แล้ว
                 markMsgAsRead(roomId).then((data) => {
                     setNewMsgCount(data || []);
                     console.log(data);
                 });
-
-                //โหลดใหม่ทุกครั้งที่ข้อความเข้าห้อง
-                if (userItem?.role.toUpperCase() === 'INSTRUCTOR') {
-                    fetchInstructorSectionsMessage();
-                }
             }
+
+            //ไม่ joine room
             else {
-                //ทุกครั้งที่มีข้อความเข้า
+                //ทุกครั้งที่มีข้อความเข้า ขณะไม่ได้อยู่ให้ห้อง ให้เช็คข้อความที่มาใหม่ในห้องอื่นๆ มาแสดงว่ามีข้อความเข้าใหม่
+                //หากเป็นนักเรียน filter ตาม id module_id ว่ามีข้อความเข้าใหม่หรือปล่าว
                 getUnreadMessageCount().then((data) => {
                     setNewMsgCount(data || []);
                     console.log(data);
                 });
 
-                if (userItem?.role.toUpperCase() === 'INSTRUCTOR') {
-                    fetchInstructorSectionsMessage();
-                }
+                playNotificationSound(); // เล่นเสียงแจ้งเตือนเมื่อได้รับข้อความใหม่ ขณะที่ไม่ได้อยู่ในห้อง
             }
+
+           
+
+            //โหลดใหม่ทุกครั้งไม่สน joine หรือปล่าว
+            if (userItem?.role.toUpperCase() === 'INSTRUCTOR') {
+                fetchInstructorSectionsMessage();
+            }
+            
         };
 
+
+        // ลงทะเบียนเมธอดในไคลเอนต์
         connection.on("ReceiveMessage", handleReceiveMessage);
 
 
@@ -192,12 +235,14 @@ const Chat = () => {
             }
         });
 
+        // ฟังก์ชัน cleanup (ภายใน return () => { ... } ของ useEffect) จะถูกเรียกใช้เมื่อคอมโพเนนต์ถูก unmount หรือเมื่อมีการเปลี่ยนแปลงใน dependency array ของ useEffect (ในกรณีนี้คือ connection, roomId)
         return () => {
+            console.log('มีการเปลี่ยนห้องแชทจ้าาา !!!!!!!. ออกจากห้องเดิมด่วนๆ')
             connection.off("ReceiveMessage", handleReceiveMessage);
         };
 
 
-    }, [connection, roomId, userItem?.role]);  // Add dependencies here
+    }, [connection, roomId]);  // Add dependencies here
 
     useEffect(() => {
         if (!roomId) return;
@@ -263,6 +308,28 @@ const Chat = () => {
     //     setNewMessagesCount(prev => prev + 1);
     // };
 
+
+    // ฟังก์ชันกรองข้อมูลตาม chatRoomId
+    const filterByChatRoomId = (courses: SectionMessage[], chatRoomId: string): any => {
+        for (const course of courses) {
+            for (const module of course.modules) {
+                const chatRoom = module.chatRooms.find(chatRoom => chatRoom.chatRoomId === chatRoomId);
+                if (chatRoom) {
+                    return {
+                        courseCode: course.courseCode,
+                        courseName: course.courseName,
+                        courseImage: course.courseImage,
+                        moduleName: module.moduleName,
+                        chatRoomId: chatRoomId,
+                        studentId: chatRoom.studentId,
+                        studentName: chatRoom.studentName,
+                        studentImage: chatRoom.studentImage
+                    };
+                }
+            }
+        }
+        return null;
+    };
     const fetchInstructorSectionsMessage = async () => {
         var termId = '070F33F2-51C6-4A3D-6622-08DC0FF4C7FB';
         try {
@@ -271,6 +338,15 @@ const Chat = () => {
             });
             var data = response.data.data;
             setInstructorSectionsMsgList(data);
+            console.log(data);
+
+            // var roomHeaderData = data.filter(x=>x.)
+            const result = filterByChatRoomId(data, roomId);
+            console.log("Chat Room Message filter:");
+            console.log(result);
+
+            setSelectedChatRoomData(result);
+
         } catch (err) {
             console.error("Error retrieving sectionList:", err);
         }
@@ -281,8 +357,14 @@ const Chat = () => {
         //ตรวจสอบว่า connection ไม่หลุด ก่อนทำการใดๆ
         if (connection) {
             try {
+                var attachments = [];
+                if (content.trim() == '' && attachments.length < 1) {
+                    alert('ไม่สามารถส่งค่าว่างได้!!!');
+                    return;
+                }
                 // Attempt to save the message to the database via API first
-                createMessage(roomId, content, [{ 'fileId': "469550BA-1F3F-44BA-2FDB-08DC18A2AB6C", 'sortOrder': 1 }]).then(async (res: ResponseMessageDTO | null) => {
+                //createMessage(roomId, content, [{ 'fileId': "469550BA-1F3F-44BA-2FDB-08DC18A2AB6C", 'sortOrder': 1 }]).then(async (res: ResponseMessageDTO | null) => {
+                createMessage(roomId, content, []).then(async (res: ResponseMessageDTO | null) => {
                     console.log("Sent Msg 1. " + JSON.stringify(res));
                     if (res) {
                         console.log("Sent Msg  2. " + JSON.stringify(res.messageFiles))
@@ -386,10 +468,35 @@ const Chat = () => {
             setIsOnline(status);
             console.log(status);
         });
+
+        // ต่อ query string และเปลี่ยนหน้าเพจ
+        // const queryString = new URLSearchParams({
+        //     chatRoomId,
+        //     courseCode,
+        //     courseName,
+        //     courseImage,
+        //     moduleName,
+        //     studentId,
+        //     studentName,
+        //     studentImage
+        // }).toString();
+
+        router.push(`/chat?r=${chatRoomId}`);
     }
+
+
+    const stopConnection = () => {
+
+        if (connection) {
+            connection.stop();
+        }
+        router.push('/login');
+    };
 
     return (
         <div className="p-2 text-xs">
+
+            <button className=" bg-blue-500 text-white p-2 rounded" onClick={() => stopConnection()}> STOP CONNECTION</button>
             <div>
                 {newMessagesCount > 0 && <p>You have {newMessagesCount} new messages!</p>}
                 <h1>Notifications : {messageUser}</h1>
@@ -506,7 +613,7 @@ const Chat = () => {
                                 </div>
                                 <div className="ml-2 flex-grow"> {/* Text content with left margin */}
                                     <p className="text-sm font-medium">{msg.senderName}</p> {/* Add styling for text size and weight */}
-                                    <p className="text-xs">{msg.content}</p>
+                                    <p className="text-xs text-blue-900">{msg.content}</p>
                                     <p className="text-xs">{new Date(msg.sentTime).toLocaleString()}</p>
                                     {msg.messageFiles?.map((img, index) => (
                                         <img key={index}
@@ -526,8 +633,7 @@ const Chat = () => {
 
                     <div className="d-flex justify-row sticky bottom-0 mt-2">
                         <input
-                            type="text"
-                            className="border p-2 mr-2 rounded w-[300px]"
+                            className="border p-2 mr-2 rounded w-full"
                             value={newMessage}
                             onChange={(e) => setNewMessage(e.target.value)}
                             onKeyDown={(e) => {

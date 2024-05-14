@@ -95,8 +95,6 @@ export interface MessagePageResultDTO {
     pageNo: number
 }
 
-
-
 export interface ChatRoomdetails {
     courseCode: string
     courseName: string
