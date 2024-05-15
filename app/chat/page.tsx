@@ -222,23 +222,23 @@ const Chat = () => {
             
         };
 
-
-        // ลงทะเบียนเมธอดในไคลเอนต์
-        connection.on("ReceiveMessage", handleReceiveMessage);
-
-
-        connection.on("UserStatusUpdate", (userId, status) => {
+        const handleUserStatusUpdate = (userId:string, status:boolean) => {
             console.log("User Status Updated:", userId, status);
-            console.log(selectedChatRoomData?.studentId.toUpperCase());
-            if (userId.toUpperCase() == selectedChatRoomData?.studentId.toUpperCase()) {
+            if (userId.toUpperCase() === selectedChatRoomData?.studentId.toUpperCase()) {
                 setIsOnline(status);
             }
-        });
+        };
+    
+
+        //// ลงทะเบียน event listeners
+        connection.on("ReceiveMessage", handleReceiveMessage);
+        connection.on("UserStatusUpdate",handleUserStatusUpdate);
 
         // ฟังก์ชัน cleanup (ภายใน return () => { ... } ของ useEffect) จะถูกเรียกใช้เมื่อคอมโพเนนต์ถูก unmount หรือเมื่อมีการเปลี่ยนแปลงใน dependency array ของ useEffect (ในกรณีนี้คือ connection, roomId)
         return () => {
-            console.log('มีการเปลี่ยนห้องแชทจ้าาา !!!!!!!. ออกจากห้องเดิมด่วนๆ')
+            console.log('มีการเปลี่ยนห้องแชทจ้าาา !!!!!!!. ลบ event listener ด่วนๆจ้าาา')
             connection.off("ReceiveMessage", handleReceiveMessage);
+            connection.off("UserStatusUpdate",handleUserStatusUpdate);
         };
 
 
